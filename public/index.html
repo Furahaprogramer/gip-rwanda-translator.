@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GIP Rwanda Translator</title>
+    <style>
+        :root {
+            --primary: #1a4a08;
+            --secondary: #2e7d14;
+            --background: #f4f9f1;
+            --surface: #ffffff;
+            --text: #1c2816;
+            --border: #dcdfd9;
+        }
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: var(--background);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            max-width: 600px;
+            width: 100%;
+            background: var(--surface);
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+        h1 { color: var(--primary); text-align: center; margin-top: 0; }
+        textarea {
+            width: 100%;
+            height: 120px;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            box-sizing: border-box;
+            resize: none;
+            font-size: 16px;
+        }
+        .output {
+            min-height: 120px;
+            background: #f8faf7;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 16px;
+            white-space: pre-wrap;
+            font-size: 16px;
+        }
+        .phrases {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+            margin-top: 16px;
+        }
+        button {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        button:hover { background: var(--secondary); }
+        .phrase-btn {
+            background: #e9f2e6;
+            color: var(--primary);
+            font-size: 14px;
+            text-align: left;
+        }
+        .phrase-btn:hover { background: #dbece4; }
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+        .tab {
+            padding: 8px 16px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+        }
+        .tab.active {
+            border-bottom-color: var(--primary);
+            font-weight: bold;
+        }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="tabs">
+        <div class="tab active" onclick="switchTab('translator')">Translator</div>
+        <div class="tab" onclick="switchTab('history')">History</div>
+    </div>
+
+    <div id="translator-tab" class="container">
+        <h1>GIP Rwanda Translator</h1>
+        <textarea id="srcText" placeholder="Type English or Kinyarwanda here..."></textarea>
+        <div id="outText" class="output">Translation will appear here...</div>
+        
+        <h3>Quick Phrases</h3>
+        <div class="phrases">
+            <button class="phrase-btn" onclick="quickTranslate('Muraho')">Muraho (Hello)</button>
+            <button class="phrase-btn" onclick="quickTranslate('Amakuru')">Amakuru (How are you?)</button>
+            <button class="phrase-btn" onclick="quickTranslate('Murakoze')">Murakoze (Thank you)</button>
+            <button class="phrase-btn" onclick="quickTranslate('Mwaramutse')">Mwaramutse (Good morning)</button>
+        </div>
+    </div>
+
+    <div id="history-tab" class="container hidden">
+        <h1>Translation History</h1>
+        <div id="historyList">No history yet.</div>
+    </div>
+
+    <script>
+        let timeout = null;
+        const srcText = document.getElementById('srcText');
+        const outText = document.getElementById('outText');
+        let history = JSON.parse(localStorage.getItem('trans_history') || '[]');
+
+        srcText.addEventListener('input', () => {
+            clearTimeout(timeout);
+            timeout = setTimeout(handleTranslate, 800);
+        });
+
+        async function handleTranslate() {
+            const text = srcText.value.trim();
+            if (!text) { outText.innerText = ""; return; }
+            outText.innerText = "Translating...";
+            
+            try {
+                const res = await fetch('/api/translate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text })
+                });
+                const data = await res.json();
+                outText.innerText = data.translation;
+                saveHistory(text, data.translation);
+            } catch (err) {
+                outText.innerText = "Error completing translation.";
+            }
+        }
+
+        function quickTranslate(text) {
+            srcText.value = text;
+            handleTranslate();
+        }
+
+        function saveHistory(src, trans) {
+            history.unshift({ src, trans, time: new Date().toLocaleTimeString() });
+            if(history.length > 30) history.pop();
+            localStorage.setItem('trans_history', JSON.stringify(history));
+            renderHistory();
+        }
+
+        function renderHistory() {
+            const list = document.getElementById('historyList');
+            if(history.length === 0) { list.innerHTML = "No history yet."; return; }
+            list.innerHTML = history.map(h => `
+                <div style="border-bottom:1px solid #eee; padding:8px 0;">
+                    <strong>${h.src}</strong> -> ${h.trans} <span style="font-size:12px; color:#888;">(${h.time})</span>
+                </div>
+            `).join('');
+        }
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            if(tab === 'translator') {
+                document.getElementById('translator-tab').classList.remove('hidden');
+                document.getElementById('history-tab').classList.add('hidden');
+            } else {
+                document.getElementById('translator-tab').classList.add('hidden');
+                document.getElementById('history-tab').classList.remove('hidden');
+                renderHistory();
+            }
+        }
+    </script>
+</body>
+</html>
